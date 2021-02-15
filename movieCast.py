@@ -3,21 +3,10 @@ import pandas as pd
 import urllib.parse
 import random
 
-
-api_key = "d3a1b7a530cd142048fbe3572bc9302b"
 movie_data = ''
 actor_data = ''
 role_data = ''
 role_count_data = ''
-    
-def Movie_Cast(movieID, actorLimit=5):
-    url = f"https://api.themoviedb.org/3/movie/{movieID}/credits?api_key={api_key}&language=en-US"
-    actors = []
-    rawRequest = requests.get(url).json()["cast"]
-    rawRequest.sort(key=extract_popularity, reverse=True)
-    for castMember in rawRequest[:actorLimit]:
-        actors.append(castMember["id"])
-    return actors
 
 def Movie_Cast_CSV(movieID, actorLimit=5):
     global role_data
@@ -28,25 +17,13 @@ def Movie_Cast_CSV(movieID, actorLimit=5):
         actors.append(castMember["imdb_name_id"])
     return actors
 
-def Movie_Name(movieID):
-    url = f"https://api.themoviedb.org/3/movie/{movieID}?api_key={api_key}&language=en-US"
-    r = requests.get(url).json()["title"]
-    return r
-
-def Actor_Movies(actorID):
-    url = f"https://api.themoviedb.org/3/person/{actorID}/movie_credits?api_key={api_key}&language=en-US"
-    r = requests.get(url).json()["cast"]
-    movieList = {}
-    for movie in r:
-        movieList[movie["id"]] = movie["title"]
-    return movieList
-
-def Actor_Movies_CSV(actorID):
+def Actor_Movies_CSV(actorID, printProgress=True):
     global role_data
     global movie_data
     global actor_data
     actor_name = actor_data[actor_data.imdb_name_id == actorID].iloc[0]["name"]
-    print(f"\nAnalyzing {actor_name}'s filmography..")
+    if printProgress:
+        print(f"\nAnalyzing {actor_name}'s filmography..")
     actorMovieList = role_data[role_data["imdb_name_id"] == actorID]
     actorMovieList_named = pd.merge(actorMovieList, movie_data, on="imdb_title_id")
     actorMovieList_named = actorMovieList_named[actorMovieList_named.metascore.notnull()]
@@ -55,6 +32,15 @@ def Actor_Movies_CSV(actorID):
     for index, movie in actorMovieList_named.iterrows():
         movieList[movie["imdb_title_id"]] = movie["title"]
     return movieList
+
+def Actors_Common_Movies(actor1, actor2):
+    actor1_movies = Actor_Movies_CSV(actor1, False)
+    actor2_movies = Actor_Movies_CSV(actor2, False)
+    common_movies = []
+    for movie in actor1_movies:
+        if movie in actor2_movies.keys():
+            common_movies.append(actor1_movies[movie])
+    return common_movies
  
 def Get_All_Data():
     print("\nLoading movie data...")
@@ -79,22 +65,6 @@ def Get_All_Data():
     print("-----------------------")
     print("Data loading complete!")
     print("-----------------------")
-    
-
-def Actor_CoStars(actorID):
-    movies = Actor_Movies(actorID)
-    print(str(len(movies)) + " movies being analyzed for this actor...")
-    costars = {}
-    for movieID, movieName in movies.items():
-        print(movieName + "...")
-        movieCast = Movie_Cast(movieID, 7)
-        for castMember in movieCast:
-            isActor = castMember == actorID
-            if castMember not in costars.keys() and not isActor:
-                costars[castMember] = [movieID]
-            elif not isActor:
-                costars[castMember].append(movieID)
-    return costars
 
 def GetActorDetails():
     global actor_data
@@ -128,38 +98,11 @@ def Actor_CoStars_CSV(actorID):
                 costars[castMember].append(movieID)
     return costars
 
-def MovieSearch():
-    search = input("search a movie title: ")
-    searchstringEncoded = urllib.parse.quote(str(search))
-    url = f"https://api.themoviedb.org/3/search/movie?api_key={api_key}&page=1&query={searchstringEncoded}"
-    r = requests.get(url).json()["results"]
-    movieMatches = {}
-    for movie in r:
-        movieMatches[movie["id"]] = movie["title"]
-    return movieMatches
-
 class Actor:
     def __init__(self, name, id, popularity = None):
         self.name = name
         self.id = id
         self.popularity = popularity
-
-def ActorSearch():
-    actorSearch = input("search an actor. if you want a random actor, type 'r' then enter to': ")
-    searchstringEncoded = urllib.parse.quote(str(actorSearch))
-    url = f"https://api.themoviedb.org/3/search/person?api_key={api_key}&page=1&query={searchstringEncoded}"
-    r = requests.get(url).json()["results"]
-    i = 1
-    print("-------------")
-    for actor in r:
-        print(str(i) + ". " + actor["name"])
-        i = i + 1
-    actorExact = input("type the number of the actor matching your search: ")
-    if int(actorExact) <= i:
-        actorRow = r[int(actorExact) - 1]
-        actorObj = Actor(actorRow["name"], actorRow["id"], actorRow["popularity"] )
-        print("\nGot it!\n")
-        return actorObj
 
 def ActorSearch_CSV():
     global actor_data
@@ -193,21 +136,6 @@ def SearchTwoActors_CSV():
     print ("\nNice. Now that your actors are selected, we'll get to work finding " +
            "a connection between their films.\n")
     return actor1, actor2
-
-def SearchTwoActors():
-    print("\n Let's find your first actor. \n")
-    actor1 = ActorSearch()
-    print("\n Time for actor #2. \n")    
-    actor2 = ActorSearch()
-    print ("\nNice. Now that your actors are selected, we'll get to work finding " +
-           "a connection between their films.\n")
-    return actor1, actor2
-
-def GetCommonMovies(actor1, actor2):
-    actor1Movies = Actor_Movies(actor1).keys()
-    actor2Movies = Actor_Movies(actor2).keys()
-    crossover = list(set(actor1Movies) & set(actor2Movies))
-    return crossover
   
 def extract_popularity(json):
     try:
@@ -216,18 +144,15 @@ def extract_popularity(json):
         return 0
 
 def Build_Actor_Connector_Final(parentDictionary, actor1, actor2, degrees):
-    print(actor1, actor2, degrees)
     global actor_data
     global movie_data
     actor1_name = actor_data[actor_data.imdb_name_id == actor1].iloc[0]["name"]
-    print(actor1_name)
     actor2_name = actor_data[actor_data.imdb_name_id == actor2].iloc[0]["name"]
     temp_parent = parentDictionary[actor2][0]
     temp_movies = parentDictionary[actor2][1]
     temp_actor = actor2
     
     connection_story = f"{actor1_name} and {actor2_name} are {degrees} degrees apart.\n\n"
-    print(connection_story)
     while temp_actor != actor1:
         actor_name = actor_data[actor_data.imdb_name_id == temp_actor].iloc[0]["name"]
         parent_name = actor_data[actor_data.imdb_name_id == temp_parent].iloc[0]["name"]
@@ -247,8 +172,8 @@ class Connect_Actors:
             add_s = "" if shared_movies == 1 else "s"
             print(f"\n{actor1.name} and {actor2.name} are 1 degree apart because " +
                   f"they appeared in {shared_movies} movie{add_s} together: \n")
-            for movie in actor1_neighbors[actor2.id]:
-                print(Movie_Name(movie))
+            for movie in Actors_Common_Movies(actor1.id, actor2.id):
+                print(movie)
         else:
             degreesAway, parent, matchingActor = BuildActorNetwork({actor1.id : actor1_neighbors}, actor1.id, actor2.id)
             if str(matchingActor) == "0":
