@@ -45,15 +45,15 @@ def Actors_Common_Movies(actor1, actor2):
 def Get_All_Data():
     print("\nLoading movie data...")
     global movie_data
-    movie_data = pd.read_csv("C:/sloan/CodeSnips/movies.csv")
+    movie_data = pd.read_csv("movies.csv")
     
     print("\nLoading actor data...")    
     global actor_data
-    actor_data = pd.read_csv("C:/sloan/CodeSnips/actors.csv")
+    actor_data = pd.read_csv("actors.csv")
     
     print("\nLoading cast data...\n")    
     global role_data
-    role_data = pd.read_csv("C:/sloan/CodeSnips/casts.csv")
+    role_data = pd.read_csv("casts.csv")
 
     global role_count_data
     role_count_data = role_data.groupby(["imdb_name_id"]).size().reset_index(name='role_count')
